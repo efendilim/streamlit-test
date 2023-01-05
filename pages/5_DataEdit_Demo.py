@@ -36,130 +36,91 @@ def init_connection():
 # Set page context
 st.set_page_config(page_title="DataEdit Demo", page_icon="📊")
 
-# --- USER AUTHENTICATION ---
-names = ["Efendi Lim", "Simin Liew"]
-usernames = ["elim", "syliew"]
+# ---- SIDEBAR ----
+#Add header and a subheader
+st.title("Data Editing Demo")
 
-# load hashed passwords
-file_path = Path(__file__).parent / "../hashed_pw.pkl"
-with file_path.open("rb") as file:
-    hashed_passwords = pickle.load(file)
+with snowflake.connector.connect(**st.secrets["snowflake"]) as cnn:
+    employeeDf = cnn.cursor().execute("select * from employee").fetch_pandas_all()
 
-authenticator = stauth.Authenticate(names, usernames, hashed_passwords,
-    "ts_demo", "ampolts", cookie_expiry_days=30)
+# main entry form
+with st.expander("Please expand to add new entry!", expanded=False):
+    with st.form("my_form"):
+        st.write("### Enter employee details")
 
-name, authentication_status, username = authenticator.login("Login", "main")
+        name_val = st.text_input("Name")
+        age_val = st.slider("Age",18,99,30)
 
-if authentication_status == False:
-    st.error("Username/password is incorrect")
+        experience_val = st.slider("Years of Experience",1,20,3)
 
-if authentication_status == None:
-    st.warning("Please enter your username and password")
+        job_val  = st.selectbox(
+        'Job title',
+        ('Engineer', 'Marketing Manager', 'Sales Director', 'Executive'))
 
-if authentication_status:
-    # ---- SIDEBAR ----
-    st.sidebar.title(f"Welcome {name}")
-    authenticator.logout("Logout", "sidebar")
-    #Add header and a subheader
-    st.title("Data Editing Demo")
+        salary_val = st.number_input("Salary", step= 1000, value=50000)
 
-    # connect to Snowflake
-    # with open('creds.json') as f: # check the creds-fake.json file for format
-    #     connection_parameters = json.load(f)  
-    # session = Session.builder.configs(connection_parameters).create()
-    
-    # get Snowflake table data
-    # employeeDf = session.table("employee")
+        insider_val = st.checkbox("Insider?")
+        # Every form must have a submit button.
+        submitted = st.form_submit_button("Save Employee")
+        if submitted:
+            # creates a new df and appends to the DB
+            st.write("name:", name_val, "| age:", age_val, "| experience: ", experience_val, "| job:", job_val, "| salary: ", salary_val, "| insider:", insider_val)
+            # newEmployeeDf=session.createDataFrame([Row(employee_id=str(uuid.uuid4()) ,
+            newEmployeeDf = pd.DataFrame({"name": name_val, "age": age_val, "experience": experience_val, "job": job_val, "salary": salary_val, "insider": insider_val}, index=[0])
+            execute_query(snowflake.connector.connect(**st.secrets["snowflake"]), newEmployeeDf, "employee")
 
-    with snowflake.connector.connect(**st.secrets["snowflake"]) as cnn:
-        employeeDf = cnn.cursor().execute("select * from employee").fetch_pandas_all()
+# Main Data grid
+st.write("### Employees database:")
+st.info("💡 Hold the `Shift` (⇧) key to select multiple rows at once.")
+# df = employeeDf.to_pandas()
+df = employeeDf
+gd = GridOptionsBuilder.from_dataframe(df)
+gd.configure_pagination(enabled=True, paginationAutoPageSize=False, paginationPageSize=10)
+gd.configure_default_column(editable=True, groupable=True)
+gd.configure_selection(selection_mode="multiple", use_checkbox=True)
+gridoptions = gd.build()
+grid_table = AgGrid(
+    df,
+    gridOptions=gridoptions,
+    update_mode=GridUpdateMode.SELECTION_CHANGED | GridUpdateMode.VALUE_CHANGED,
+    theme="balham",
+)
 
-    # main entry form
-    with st.expander("Please expand to add new entry!", expanded=False):
-        with st.form("my_form"):
-            st.write("### Enter employee details")
+# Selected rows grid
+sel_row = grid_table["selected_rows"]
+st.subheader("Selected rows:")
+df_sel_row = pd.DataFrame(sel_row)
+if not df_sel_row.empty:
+    if st.button("Delete Selection"):
+        st.success('Rows deleted')
+    # st.write(df_sel_row)
+    st.write(df_sel_row.loc[:, df_sel_row.columns != df_sel_row.columns[0]])
 
-            name_val = st.text_input("Name")
-            age_val = st.slider("Age",18,99,30)
-
-            experience_val = st.slider("Years of Experience",1,20,3)
-            
-            job_val  = st.selectbox(
-            'Job title',
-            ('Engineer', 'Marketing Manager', 'Sales Director', 'Executive'))
-
-            salary_val = st.number_input("Salary", step= 1000, value=50000)
-
-            insider_val = st.checkbox("Insider?")
-            # Every form must have a submit button.
-            submitted = st.form_submit_button("Save Employee")
-            if submitted:
-                # creates a new df and appends to the DB
-                st.write("name:", name_val, "| age:", age_val, "| experience: ", experience_val, "| job:", job_val, "| salary: ", salary_val, "| insider:", insider_val)
-                # newEmployeeDf=session.createDataFrame([Row(employee_id=str(uuid.uuid4()) ,
-                # newEmployeeDf=session.createDataFrame([Row(
-                #     name=name_val, 
-                #     age=age_val, 
-                #     experience=experience_val,
-                #     job=job_val, 
-                #     salary = salary_val,
-                #     insider=insider_val)])
-                # newEmployeeDf.write.mode("append").saveAsTable("employee")
-                newEmployeeDf = pd.DataFrame({"name": name_val, "age": age_val, "experience": experience_val, "job": job_val, "salary": salary_val, "insider": insider_val}, index=[0])
-                execute_query(snowflake.connector.connect(**st.secrets["snowflake"]), newEmployeeDf, "employee")
-
-    # Main Data grid
-    st.write("### Employees database:")
-    st.info("💡 Hold the `Shift` (⇧) key to select multiple rows at once.")
-    # df = employeeDf.to_pandas()
-    df = employeeDf
-    gd = GridOptionsBuilder.from_dataframe(df)
-    gd.configure_pagination(enabled=True, paginationAutoPageSize=False, paginationPageSize=10)
-    gd.configure_default_column(editable=True, groupable=True)
-    gd.configure_selection(selection_mode="multiple", use_checkbox=True)
-    gridoptions = gd.build()
-    grid_table = AgGrid(
-        df,
-        gridOptions=gridoptions,
-        update_mode=GridUpdateMode.SELECTION_CHANGED | GridUpdateMode.VALUE_CHANGED,
-        theme="balham",  #"streamlit"
+# Modified rows grid
+edit_row = grid_table["data"]
+st.subheader("Edited rows:")
+df_edit_row = pd.DataFrame(edit_row)
+# df_orig_row = employeeDf.to_pandas()
+df_orig_row = employeeDf
+df_orig_row['status'] = "Basic"
+df_edit_row['status'] = "Edited"
+cols = df_orig_row.columns[:-1].tolist()
+df_change = pd.concat([df_orig_row,df_edit_row]).drop_duplicates(subset=cols, keep=False)
+if not df_change.empty:
+    df_db = df_change[df_change['status'] == 'Edited']
+    df_db = df_db[cols]
+    df_db['updated_user'] = "CA01"
+    table_name = "employee_changes"
+    run_query = st.button(
+        "Save Changes to DB", on_click=execute_query, args=(init_connection(), df_db, table_name)
     )
-
-    # Selected rows grid
-    sel_row = grid_table["selected_rows"]
-    st.subheader("Selected rows:")
-    df_sel_row = pd.DataFrame(sel_row)
-    if not df_sel_row.empty:
-        if st.button("Delete Selection"):
-            st.success('Rows deleted')
-        # st.write(df_sel_row)
-        st.write(df_sel_row.loc[:, df_sel_row.columns != df_sel_row.columns[0]])
-
-    # Modified rows grid
-    edit_row = grid_table["data"]
-    st.subheader("Edited rows:")
-    df_edit_row = pd.DataFrame(edit_row)
-    # df_orig_row = employeeDf.to_pandas()
-    df_orig_row = employeeDf
-    df_orig_row['status'] = "Basic"
-    df_edit_row['status'] = "Edited"
-    cols = df_orig_row.columns[:-1].tolist()
-    df_change = pd.concat([df_orig_row,df_edit_row]).drop_duplicates(subset=cols, keep=False)
-    if not df_change.empty:
-        df_db = df_change[df_change['status'] == 'Edited']
-        df_db = df_db[cols]
-        df_db['updated_user'] = username    #"CA01"
-        table_name = "employee_changes"
-        run_query = st.button(
-            "Save Changes to DB", on_click=execute_query, args=(init_connection(), df_db, table_name)
+    if run_query:
+        st.success(
+            f"✔️ Changes saved to the `{table_name}` table in snowflake database."
         )
-        if run_query:
-            st.success(
-                f"✔️ Changes saved to the `{table_name}` table in snowflake database."
-            )
-            st.snow()
-        # if st.button("Save Changes"):
-        #     st.success('Rows saved')
+        st.snow()
+    # if st.button("Save Changes"):
+    #     st.success('Rows saved')
 
-        st.write(df_change.sort_values(by=['NAME','status']))
+    st.write(df_change.sort_values(by=['NAME','status']))
     
