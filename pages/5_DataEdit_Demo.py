@@ -6,11 +6,6 @@ from st_aggrid.grid_options_builder import GridOptionsBuilder
 import snowflake.connector
 from snowflake.connector.pandas_tools import write_pandas
 
-# Authenticator
-import pickle
-from pathlib import Path
-import streamlit_authenticator as stauth
-
 def execute_query(conn, df_row, table_name):
     if not df_row.empty:
         # conn.cursor().execute(
