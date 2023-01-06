@@ -20,4 +20,4 @@ cnn.close()
 
 # print(df.head())
 
-st.dataframe(df)
+st.write(df)
